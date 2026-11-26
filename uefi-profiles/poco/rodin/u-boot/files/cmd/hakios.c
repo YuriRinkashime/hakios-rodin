@@ -26,6 +26,7 @@
 #include <env.h>
 #include <fdt_support.h>
 #include <fdtdec.h>
+#include <gzip.h>
 #include <init.h>
 #include <lmb.h>
 #include <mapmem.h>
@@ -141,6 +142,39 @@ static int take_payload(const void *data, ulong size)
 	return 0;
 }
 
+static int take_payload_gz(const void *data, ulong size)
+{
+	phys_addr_t addr = PAYLOAD_BASE;
+	void *dst = map_sysmem(PAYLOAD_BASE, PAYLOAD_MAX);
+	unsigned long out_len = PAYLOAD_MAX;
+	const u32 *head;
+	ulong xnup_size;
+
+	/*
+	 * Reserve PAYLOAD_BASE before gunzip() decompresses the gzipped XNUP container into 0xAC000000
+	 * and flushes the D-cache for loader.efi + early MMU-off kernel startup.
+	 */
+	lmb_alloc_mem(LMB_MEM_ALLOC_ADDR, 0, &addr, SZ_64M, LMB_NONE);
+	if (gunzip(dst, PAYLOAD_MAX, (unsigned char *)data, &out_len)) {
+		printf("[oosexgang] hakios: payload.gz gunzip failed\n");
+		return -EINVAL;
+	}
+	head = dst;
+	if (out_len < 8 || head[0] != XNUP_MAGIC || head[1] > out_len - 8) {
+		printf("[oosexgang] hakios: decompressed payload.gz (%lu bytes) is not an XNUP payload\n", out_len);
+		return -EINVAL;
+	}
+	xnup_size = head[1] + 8;
+	if (xnup_size > PAYLOAD_MAX) {
+		printf("[oosexgang] hakios: payload of %lu bytes is over %u\n", xnup_size, PAYLOAD_MAX);
+		return -E2BIG;
+	}
+	flush_dcache_range(PAYLOAD_BASE, PAYLOAD_BASE + ALIGN(xnup_size, ARCH_DMA_MINALIGN));
+	payload_size = xnup_size;
+	printf("[oosexgang] hakios: payload.gz %lu -> %lu bytes at %#lx\n", size, xnup_size, PAYLOAD_BASE);
+	return 0;
+}
+
 static int take_env(const void *data, ulong size)
 {
 	char cmd[64];
@@ -184,6 +218,8 @@ static int take_container(const u8 *data, ulong size)
 			ret = take_loader(p, e->size);
 		else if (!strcmp(name, "payload"))
 			ret = take_payload(p, e->size);
+		else if (!strcmp(name, "payload.gz"))
+			ret = take_payload_gz(p, e->size);
 		else if (!strcmp(name, "env"))
 			ret = take_env(p, e->size);
 		else

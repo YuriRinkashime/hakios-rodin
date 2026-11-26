@@ -9,7 +9,7 @@
 | Target Kernel | HakiOS `oosexgang/hakios-xnu-kernel` branch `common` (`xnu-12377.121.6` / Darwin 27.2) |
 | UEFI Profile | `uefi-profiles/poco/rodin/` (`v2026.07`, EL1 chainboot under GenieZone) |
 | Maintainer | `YuriRinkashime` |
-| State | Test #1 proved LK boots slot `b` image and diagnosed WDT/FB overlap; Test #2 fixes staged & built |
+| State | Test #4 booted `XNULOADER v3` at EL1 (`rodin`); Phase 3 minimal XNU kernel built & staged into `XNUP` |
 
 Nothing in this repository or its bring-up configuration writes to the phone's internal UFS storage. There is no `storage { }` node in `board.dts` and zero `ufs_write=1` boot arguments. Active slot `a` (`boot_a`, `init_boot_a`, `lk_a`) and `userdata` are never modified by anything here.
 
@@ -24,14 +24,23 @@ Nothing in this repository or its bring-up configuration writes to the phone's i
    - **Framebuffer Cache/Stride & Unmapped TrustZone Regions:** `armv8-mem-map.c` maps the framebuffer (`0xfcc00000`) and `ramoops` (`0x6ec00000`) as `MT_NORMAL_NC`, leaves `tee-reserved` (`0xee000000..0xfcc00000`) and `gz`/`mkp` (`>= 0x33d800000`) unmapped, and uses 32-pixel-aligned stride `1248 * 4 = 4992` bytes/line.
    - **GKI v4 `HKUB` Scan & Diagnostics:** `board_late_init()` scans `/chosen/linux,initrd-*` for `"HKUB"`, paints visual milestone bars + 16px white left ruler, and logs ASCII breadcrumbs to `pmsg-ramoops-0` (`0x6ee10000`).
 5. **`PAYLOAD_BASE` Collision (`tee-reserved`):** `0xee200000..0xfc4fffff` collides with HakiOS's default `0xf0000000` `PAYLOAD_BASE`. Update `PAYLOAD_BASE` in `cmd/hakios.c` and rebuild `loader.efi` with `LOADER_CFLAGS="-DPAYLOAD_BASE=0xAC000000ULL"` before booting an `XNUP` payload on `rodin`.
+6. **Live Test #4 (`XNULOADER v3` at EL1) & Phase 3 XNU Kernel Readiness:**
+   - Test #4 booted `hakios-rodin-boot.img` + `hakios-rodin-init_boot.img` end-to-end into `loader.efi` (`XNULOADER v3`) at `CurrentEL=1` (`MIDR=410fd871`, `CNTFRQ=13000000`, display `1220x2712` at `0xfcc20000`, `platform rodin`, zero watchdog resets), stopping cleanly waiting for `XNUP` at `0xAC000000`.
+   - **`soc.dtsi` UART Omission:** `serial@11001000` is MediaTek `mt6577-uart` (16550-style, clock-gated by LK `mtk_printk_ctrl.disable_uart=1`), not `arm,pl011`. Omitting `uart` from `soc.dtsi` prevents `loader.efi` from passing a bogus `arm,pl011` node to `pe_serial.c`.
+   - **`board.dts` Console Bootargs:** Uses `bootargs = "-v", "gpu=0", "debug=0x144";` (removes `serial=3` and enables verbose framebuffer console).
+   - **XNU Early Console / GICv3 / GenieZone EL1 Readiness (`xnu-12377.121.6`):**
+     - `osfmk/console/video_console.c`: writes opaque `0xFF` alpha (`0xFFRRGGBB`) for 32bpp `vc_colors`, `vc_clear_screen()`, `vc_paint_char_32()`, and `vc_reverse_cursor()` so text is visible on MT6899 OVL.
+     - `osfmk/arm64/gic_v3_irq.c`: clears `ICC_CTLR_EL1.EOImode` (bit 1) in `gic_v3_irq_cpu_init()` so `ICC_EOIR1_EL1` drops priority and deactivates PPI 27 under MediaTek ATF/GenieZone.
+     - `osfmk/arm64/caches_asm.s` & `osfmk/arm/cpuid.c`: guards `CleanPoC_Dcache`, `CleanPoU_Dcache`, `FlushPoC_Dcache`, `Flush_Dcache`, `FlushPoU_Dcache` and forces `c_bulksize_op = 0` under `BCM2837` so XNU performs VA-only cache maintenance (zero `dc isw`/`dc csw`/`dc cisw` set/way instructions that trap under GenieZone EL2).
+   - **`init_boot_b` 8 MiB Fit via `payload.gz`:** Minimal `qemu bringup` XNU (`mach.development.bcm2837`) + `XNUP` (`~16.95 MiB`) is gzipped (`payload.gz`, `~6.18 MiB`) inside `HKUB` so `hakios-rodin-init_boot.img` (`~6.27 MiB`) fits inside `init_boot_b` (`8 MiB`) and `cmd/hakios.c` decompresses `payload.gz` to `0xAC000000`.
 
 ## Bring-Up Status
 
 | Subsystem | Feature / Boot Argument | State | Notes |
 | --- | --- | --- | --- |
-| `loader.efi` | `arch/arm64/boot/build.sh` (`rodin` in `platforms.h`) | Built / QEMU OK | `workbench/loader_boot_test.sh` passed (`loader_boot_test: ok`) |
-| U-Boot (`poco/rodin`) | `uefi-profiles/poco/rodin/` (`v2026.07`) | Partial (Test #1) | LK jumped into slot `b` image; Test #2 fixes WDT (`0x1c00b000`) & `ram_top` (`0xb8000000`) |
-| Loader / Early Console | `bootargs`: `gpu=0 debug=0x144 serial=3` | Not tested | Scaffolded from live FDT and `/proc/iomem` |
+| `loader.efi` | `arch/arm64/boot/build.sh` (`rodin` in `platforms.h`) | Verified (Test #4) | `XNULOADER v3` reached at `CurrentEL=1` (`MIDR=410fd871`, `CNTFRQ=13 MHz`, `platform rodin`); rebuilt with `.uart = 0` |
+| U-Boot (`poco/rodin`) | `uefi-profiles/poco/rodin/` (`v2026.07`) | Verified (Test #4) | Zero WDT resets, clean `0xb7000000` `ram_top`, VA-only CMO, `payload.gz` decompression to `0xAC000000` |
+| Loader / Early Console | `bootargs`: `-v gpu=0 debug=0x144` | Built & staged | Minimal `qemu bringup` XNU built (`17,774,432` B), 0 set/way ops, `0xFF` alpha + `EOImode=0` |
 | Display / Framebuffer | `loader.fb-base = 0xfcc20000`, `backlight.type = "soft"` | Not tested | `atag,videolfb`: `0xfcc20000`, `0x33d0000` (`51.81 MiB`), `60.00 Hz`, `o10_42_02_0a_dsc_vdo_lcm_drv` |
 | CPU / SMP | `platform.cores = 8`, `psci = "smc"` | Not tested | Initial `boot.cpus = 1`; All-Big-Core `0x000..0x700` MPIDR layout |
 | Touch | Disabled (`xiaomi_touch@0` / Goodix SPI) | Not tested | Documented only (`IRQ=9`, `RST=134`, `AVDD=73`, `1220×2712`); kept disabled |

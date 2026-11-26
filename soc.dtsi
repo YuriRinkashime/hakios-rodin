@@ -14,7 +14,7 @@
 		gic-dist = <0x0c400000>;       // interrupt-controller@c400000 (arm,gic-v3), reg[0]
 		gic-redist = <0x0c440000>;     // interrupt-controller@c400000 (arm,gic-v3), reg[1]
 		gic-redist-size = <0x00200000>; // interrupt-controller@c400000 (arm,gic-v3), reg[1] size (2 MiB)
-		uart = <0x11001000>;           // serial@11001000 (mediatek,mt6577-uart, uart-line = 0)
+		// uart = <0x11001000>;        // serial@11001000 is mediatek,mt6577-uart (not arm,pl011); omit until MT6577 serial driver exists
 		ufs = <0x112b0000>;            // ufshci@112b0000 (/proc/iomem; read-only reference)
 		cores = <8>;                   // 8x Cortex-A725 (All-Big-Core: 4 + 3 + 1 performance domains)
 		core-shift = <8>;              // MPIDR Aff1 stride: cpu@0..7 reg 0x000..0x700
