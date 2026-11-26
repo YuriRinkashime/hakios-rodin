@@ -9,7 +9,7 @@
 | Target Kernel | HakiOS `oosexgang/hakios-xnu-kernel` branch `common` (`xnu-12377.121.6` / Darwin 27.2) |
 | UEFI Profile | `uefi-profiles/poco/rodin/` (`v2026.07`, EL1 chainboot under GenieZone) |
 | Maintainer | `YuriRinkashime` |
-| State | Test #11 verified MT6899 UFSHCI 4.0 read-only GPT enumeration (LUN 0/1 raw 8 MB, LUN 2 93/93 GPT `504552 MB` `hdr_crc`/`tbl_crc` ok, `HCE=0` restored, zero writes); Phase 5C-1 adds polled read-only `mt6363keys` (`spmi@1cc04000` SID `4`) + `xiaomi_touch@0` Goodix SPI audit |
+| State | Test #17 confirmed zero ghost touches on `rodin` (`8` cores, `5007 MB`, UFS RO, `3×` MT6363 buttons); Phase 5C-7 lowers interior THP thresholds to `300..450` (with dedicated `>= 550` `row 39` edge guard, quiet-only baseline drift, and idle `max_peak` telemetry) so real finger taps fire cleanly without `row 39` ghosts |
 
 Nothing in this repository or its bring-up configuration writes to the phone's internal UFS storage. There is no `storage { }` node in `board.dts` and zero `ufs_write=1` boot arguments. Active slot `a` (`boot_a`, `init_boot_a`, `lk_a`) and `userdata` are never modified by anything here.
 
@@ -54,12 +54,12 @@ Nothing in this repository or its bring-up configuration writes to the phone's i
 | --- | --- | --- | --- |
 | `loader.efi` | `arch/arm64/boot/build.sh` (`rodin` in `platforms.h`) | Verified (Test #4–#6) | `XNULOADER v3` at `CurrentEL=1` (`MIDR=410fd871`, `CNTFRQ=13 MHz`, `platform rodin`, `.uart = 0`) |
 | U-Boot (`poco/rodin`) | `uefi-profiles/poco/rodin/` (`v2026.07`) | Verified (Test #4–#6); 5 GiB bank staged | Zero WDT resets, clean `0xb7000000` `ram_top`, VA-only CMO, 3-bank DRAM (`5120 MiB` Rank-1 bank) |
-| Loader / Early Console | `bootargs`: `-v gpu=0 debug=0x144 rd=md0 small_cores_after=0 ufs_ro_probe=0x112b0000 buttons=1` | Verified (Test #5–#11) | GICv3 `EOImode=0` + PPI 27 + VA-only cache ops + `0xFF` alpha verified on device |
-| Display / Framebuffer | `loader.fb-base = 0xfcc20000`, `backlight.type = "soft"` | Verified (Test #5–#11) | `MiniIOMobileFramebuffer` `1125x2436` on `1220x2712` (`4992` B/row) rendering kernel console cleanly |
-| RAM-only Userspace | `rd=md0` (`tools/qemu-root.sh` APFS + `/sbin/launchd`) | Verified (Test #6–#11) | Self-contained static arm64 `/sbin/launchd` (PID 1) via `/dev/console` (`# `); zero UFS writes |
-| CPU / SMP | `platform.cores = 8`, `boot.cpus = 8`, `psci = "smc"` | Verified (Test #7–#11) | 8× Cortex-A725 All-Big-Core `0x000..0x700` + `5007 MB` Rank-1 DRAM verified on device |
-| Touch | Disabled (`xiaomi_touch@0` / Goodix SPI) | Phase 5C-2 audit complete (disabled) | `spi1@11011800` + `0x11036000`, `IRQ=GPIO 9`, `RST=GPIO 134`, `AVDD=GPIO 73`, `mt6368_vtp` 1.8 V; kept disabled until `mtkspi` |
-| Buttons | Polled read-only `mt6363keys` (`buttons=1`) | Phase 5C-1 staged (Test #12 pending) | `spmi@1cc04000` (`pmif` `SWINF_2` `0x0880..0x08a8`), MT6363 `SID 4` `SWCID 0x000b=0x63`, `TOPSTATUS 0x001e` bits `1/3/4` -> `/dev/hakios-touch` + console |
+| Loader / Early Console | `bootargs`: `cpus=8 -v gpu=0 debug=0x144 rd=md0 small_cores_after=0 ufs_ro_probe=0x112b0000 buttons=1 touchscreen=1` | Verified (Test #5–#12, #13 regression fixed) | GICv3 `EOImode=0` + PPI 27 + VA-only cache ops + `0xFF` alpha verified on device |
+| Display / Framebuffer | `loader.fb-base = 0xfcc20000`, `backlight.type = "soft"` | Verified (Test #5–#13) | `MiniIOMobileFramebuffer` `1125x2436` on `1220x2712` (`4992` B/row) rendering kernel console cleanly |
+| RAM-only Userspace | `rd=md0` (`tools/qemu-root.sh` APFS + `/sbin/launchd`) | Verified (Test #6–#13) | Self-contained static arm64 `/sbin/launchd` (PID 1) via `/dev/console` (`# `); zero UFS writes |
+| CPU / SMP | `platform.cores = 8`, `boot.cpus = 8`, `psci = "smc"` | Verified (Test #7–#12; `cpus=8` restored in 5C-3) | 8× Cortex-A725 All-Big-Core `0x000..0x700` + `5007 MB` Rank-1 DRAM verified on device |
+| Touch | Polled `xiaomi_touch@0` (`goodix.c` MT6899 backend, `touchscreen=1`) | Zero ghosts verified (Test #17); Phase 5C-7 staged | `spi1@11011800` (`0x100`), `gpio@10005000` (`IRQ=9`, `AVDD=73`, `RST=134`), `mt6368_vtp` `1.8 V` (`SID 5`), `GT9916K` `05.80.07.1a` THP (`18x40` `diff` @ `0x10d5c`, interior `noise*2+80` `300..450`, `row 39 >= 550` guard, 2-frame confirm, quiet-only drift) |
+| Buttons | Polled read-only `mt6363keys` (`buttons=1`) | Verified (Test #12) | `spmi@1cc04000` (`pmif` `SWINF_2` `0x0880..0x08a8`), MT6363 `SID 4` `SWCID 0x000b=0x63`, `TOPSTATUS 0x001e` bits `1/3/4` -> `/dev/hakios-touch` + console (`VOL_UP`, `VOL_DOWN`, `POWER` down/up verified) |
 | GPU (Mali-G720 MC7) | `gpu=0` (software rendering) | Not tested | `mali@13000000` + `gpueb@13c00000` documented; CSF/GPUEB bring-up unstarted |
 | Storage (UFS) | Read-only probe (`0x112b0000`, `ufs_ro_probe=0x112b0000`) | Verified (Test #11, zero writes) | `DME_LINKSTARTUP` try 1, `NOP IN`, `fDeviceInit` (2 ms), `SAMSUNG KLUFG4NHHD-F0G1 1200`: LUN 0/1 raw 8 MB, LUN 2 GPT 93/93 (`hdr_crc=0bf42308`, `tbl_crc=8870a302`), `HCE=0` restored |
 | Audio / Wi-Fi / BT / Modem / Camera / Thermal | — | Not tested | Excluded from initial scaffold |

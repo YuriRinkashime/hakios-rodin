@@ -24,16 +24,17 @@
 	boot {
 		fastboot-product = "rodin";
 		cpus = <8>;
-		bootargs = "-v", "gpu=0", "debug=0x144", "rd=md0", "small_cores_after=0", "ufs_ro_probe=0x112b0000", "buttons=1";
+		bootargs = "-v", "gpu=0", "debug=0x144", "rd=md0", "small_cores_after=0", "ufs_ro_probe=0x112b0000", "buttons=1", "touchscreen=1";
 	};
 
-	// Documented hardware nodes from Android FDT (kept disabled for initial bring-up):
+	// Documented hardware nodes from Android FDT:
 	//
-	// Touch IC (xiaomi_touch@0, xiaomi,touch-spi / Goodix SPI; dmesg: goodix_ts):
-	//   interrupt = <9>;                  // GPIO 9, IRQ flag 0x2008
+	// Touch IC (xiaomi_touch@0, xiaomi,touch-spi / Goodix Berlin SPI1 @ 0x11011800, 1.8 V mt6368_vtp on SPMI SID 5):
+	//   interrupt = <9>;                  // GPIO 9, active-low
 	//   reset = <134>;                    // GPIO 134 (0x86)
 	//   avdd-gpio = <73>;                 // GPIO 73 (0x49)
-	//   coordinates = <0x0001dc8f 0x0004235f>; // 1220x2712 with super-resolution-factor = 100
+	//   spi1-pins = <50 51 52 53>;        // CLK, CS, MISO, MOSI (pinctrl function 1 touch-ap)
+	//   coordinates = <0x0001dc8f 0x0004235f>; // 1220x2712 (auto-scaled from Goodix IC info)
 	//
 	// Physical keys (mt6363keys, compatible = "mediatek,mt6363-keys" on PMIC MT6363):
 	//   power      = keycode 0x74 (116, KEY_POWER, wakeup-source)
