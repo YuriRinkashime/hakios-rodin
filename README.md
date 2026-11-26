@@ -9,7 +9,7 @@
 | Target Kernel | HakiOS `oosexgang/hakios-xnu-kernel` branch `common` (`xnu-12377.121.6` / Darwin 27.2) |
 | UEFI Profile | `uefi-profiles/poco/rodin/` (`v2026.07`, EL1 chainboot under GenieZone) |
 | Maintainer | `YuriRinkashime` |
-| State | Test #4 booted `XNULOADER v3` at EL1 (`rodin`); Phase 3 minimal XNU kernel built & staged into `XNUP` |
+| State | Test #5 booted Darwin/XNU `12377.121.6` kernel (`GenericARMPE` + `MiniIOMobileFramebuffer`); Phase 4 `rd=md0` userspace built & QEMU-verified for Test #6 |
 
 Nothing in this repository or its bring-up configuration writes to the phone's internal UFS storage. There is no `storage { }` node in `board.dts` and zero `ufs_write=1` boot arguments. Active slot `a` (`boot_a`, `init_boot_a`, `lk_a`) and `userdata` are never modified by anything here.
 
@@ -33,15 +33,19 @@ Nothing in this repository or its bring-up configuration writes to the phone's i
      - `osfmk/arm64/gic_v3_irq.c`: clears `ICC_CTLR_EL1.EOImode` (bit 1) in `gic_v3_irq_cpu_init()` so `ICC_EOIR1_EL1` drops priority and deactivates PPI 27 under MediaTek ATF/GenieZone.
      - `osfmk/arm64/caches_asm.s` & `osfmk/arm/cpuid.c`: guards `CleanPoC_Dcache`, `CleanPoU_Dcache`, `FlushPoC_Dcache`, `Flush_Dcache`, `FlushPoU_Dcache` and forces `c_bulksize_op = 0` under `BCM2837` so XNU performs VA-only cache maintenance (zero `dc isw`/`dc csw`/`dc cisw` set/way instructions that trap under GenieZone EL2).
    - **`init_boot_b` 8 MiB Fit via `payload.gz`:** Minimal `qemu bringup` XNU (`mach.development.bcm2837`) + `XNUP` (`~16.95 MiB`) is gzipped (`payload.gz`, `~6.18 MiB`) inside `HKUB` so `hakios-rodin-init_boot.img` (`~6.27 MiB`) fits inside `init_boot_b` (`8 MiB`) and `cmd/hakios.c` decompresses `payload.gz` to `0xAC000000`.
+7. **Live Test #5 (Full Darwin/XNU `12377.121.6` Kernel Boot) & Phase 4 RAM-Only `rd=md0` Userspace:**
+   - Test #5 booted `hakios-rodin-boot.img` + `hakios-rodin-init_boot.img` through U-Boot -> `loader.efi` -> XNU `12377.121.6` (`pmap`, `VM`, `IONVRAM`, `minicrypto`, `MAC Framework`, `GenericARMPE`, `GenericARMCPU` `cpu 0`, `lo0`, `MiniIOMobileFramebuffer` `1125x2436` on `1220x2712` panel with `4992` B/row stride and crisp `0xFF` white-on-black text), reaching `GenericARMPE: all started: 1 processor running` and pausing cleanly at `Failed to mount root device` (no rootfs staged in Phase 3).
+   - **Self-Contained `md0` APFS Rootfs (`tools/qemu-root.sh`):** Phase 4 builds a `4,194,304` B (`4 MiB`, `54,379` B gzip-9) APFS container image (`tools/apfs/mkapfs.py`) holding `/dev`, `/etc/motd`, `/mnt`, `/tmp`, and static freestanding arm64 `/sbin/launchd` (`tools/qemu-init/*.c`, zero Apple/IPSW files) packed into `XNUP` (`21,969,016` B uncompressed, `0xAC000000..0xAD4F3878`, `155.05 MiB` below `0xB7000000`) with `rd=md0`. Gzipped `payload.gz` (`6,530,872` B) + `loader.efi` (`87,040` B) in `HKUB` keeps `hakios-rodin-init_boot.img` (`6,627,328` B) comfortably inside `init_boot_b` (`8 MiB`), with zero UFS storage writes.
 
 ## Bring-Up Status
 
 | Subsystem | Feature / Boot Argument | State | Notes |
 | --- | --- | --- | --- |
-| `loader.efi` | `arch/arm64/boot/build.sh` (`rodin` in `platforms.h`) | Verified (Test #4) | `XNULOADER v3` reached at `CurrentEL=1` (`MIDR=410fd871`, `CNTFRQ=13 MHz`, `platform rodin`); rebuilt with `.uart = 0` |
-| U-Boot (`poco/rodin`) | `uefi-profiles/poco/rodin/` (`v2026.07`) | Verified (Test #4) | Zero WDT resets, clean `0xb7000000` `ram_top`, VA-only CMO, `payload.gz` decompression to `0xAC000000` |
-| Loader / Early Console | `bootargs`: `-v gpu=0 debug=0x144` | Built & staged | Minimal `qemu bringup` XNU built (`17,774,432` B), 0 set/way ops, `0xFF` alpha + `EOImode=0` |
-| Display / Framebuffer | `loader.fb-base = 0xfcc20000`, `backlight.type = "soft"` | Not tested | `atag,videolfb`: `0xfcc20000`, `0x33d0000` (`51.81 MiB`), `60.00 Hz`, `o10_42_02_0a_dsc_vdo_lcm_drv` |
+| `loader.efi` | `arch/arm64/boot/build.sh` (`rodin` in `platforms.h`) | Verified (Test #4–#5) | `XNULOADER v3` at `CurrentEL=1` (`MIDR=410fd871`, `CNTFRQ=13 MHz`, `platform rodin`, `.uart = 0`) |
+| U-Boot (`poco/rodin`) | `uefi-profiles/poco/rodin/` (`v2026.07`) | Verified (Test #4–#5) | Zero WDT resets, clean `0xb7000000` `ram_top`, VA-only CMO, `payload.gz` decompression to `0xAC000000` |
+| Loader / Early Console | `bootargs`: `-v gpu=0 debug=0x144 rd=md0` | Verified (Test #5); `rd=md0` staged | GICv3 `EOImode=0` + PPI 27 + VA-only cache ops + `0xFF` alpha verified on device |
+| Display / Framebuffer | `loader.fb-base = 0xfcc20000`, `backlight.type = "soft"` | Verified (Test #5) | `MiniIOMobileFramebuffer` `1125x2436` on `1220x2712` (`4992` B/row) rendering kernel console cleanly |
+| RAM-only Userspace | `rd=md0` (`tools/qemu-root.sh` APFS + `/sbin/launchd`) | QEMU-verified; staged (Test #6) | Self-contained static arm64 `/sbin/launchd` (PID 1) via `/dev/console`; zero UFS writes |
 | CPU / SMP | `platform.cores = 8`, `psci = "smc"` | Not tested | Initial `boot.cpus = 1`; All-Big-Core `0x000..0x700` MPIDR layout |
 | Touch | Disabled (`xiaomi_touch@0` / Goodix SPI) | Not tested | Documented only (`IRQ=9`, `RST=134`, `AVDD=73`, `1220×2712`); kept disabled |
 | Buttons | Disabled (`mt6363keys` PMIC keys) | Not tested | Documented only (`KEY_POWER=0x74`, `KEY_VOLUMEDOWN=0x72`, `KEY_VOLUMEUP=0x73`) |
