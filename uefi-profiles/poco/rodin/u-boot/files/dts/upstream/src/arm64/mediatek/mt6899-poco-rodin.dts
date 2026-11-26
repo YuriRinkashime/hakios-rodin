@@ -36,13 +36,15 @@
 
 	/*
 	 * Expose ONLY verified clean unreserved DRAM banks inside armv8-mem-map.c:
-	 * - Bank 0: 0xa0000000..0xb7000000 (clean mid-DRAM, 16 MiB guard below SCP-reserved@b8000000)
-	 * - Bank 1: 0x48a00000..0x66f00000 (clean low-DRAM above BL31@48800000, below initrd@66f00000)
+	 * - Bank 0: 0xa0000000..0xb7000000 (368 MiB clean mid-DRAM; U-Boot ram_top/reloc/payload stay <= 0xb7000000)
+	 * - Bank 1: 0x48a00000..0x66f00000 (485 MiB clean low-DRAM; HKUB staging & loader low_dma < 4 GiB)
+	 * - Bank 2: 0x1c0000000..0x300000000 (5120 MiB clean Rank-1 high-DRAM for XNU physBase..memSize; zero no-map overlap)
 	 */
 	memory@a0000000 {
 		device_type = "memory";
 		reg = <0x0 0xa0000000 0x0 0x17000000>,
-		      <0x0 0x48a00000 0x0 0x1e500000>;
+		      <0x0 0x48a00000 0x0 0x1e500000>,
+		      <0x1 0xc0000000 0x1 0x40000000>;
 	};
 
 	reserved-memory {

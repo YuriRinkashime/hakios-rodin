@@ -50,6 +50,12 @@ static struct mm_region mediatek_mem_map[] = {
 		.size = 0x03400000UL,
 		.attrs = PTE_BLOCK_MEMTYPE(MT_NORMAL_NC) | PTE_BLOCK_INNER_SHARE,
 	}, {
+		/* Clean 5 GiB Rank-1 high DRAM 0x1c0000000..0x300000000 (above dramc-rk0@1bfff0000, 984 MiB below mkp/gz@33d800000) */
+		.virt = 0x1c0000000UL,
+		.phys = 0x1c0000000UL,
+		.size = 0x140000000UL,
+		.attrs = PTE_BLOCK_MEMTYPE(MT_NORMAL) | PTE_BLOCK_INNER_SHARE,
+	}, {
 		/* List terminator */
 	}
 };
