@@ -24,7 +24,7 @@
 	boot {
 		fastboot-product = "rodin";
 		cpus = <8>;
-		bootargs = "-v", "gpu=0", "debug=0x144", "rd=md0", "small_cores_after=0";
+		bootargs = "-v", "gpu=0", "debug=0x144", "rd=md0", "small_cores_after=0", "ufs_ro_probe=0x112b0000";
 	};
 
 	// Documented hardware nodes from Android FDT (kept disabled for initial bring-up):
