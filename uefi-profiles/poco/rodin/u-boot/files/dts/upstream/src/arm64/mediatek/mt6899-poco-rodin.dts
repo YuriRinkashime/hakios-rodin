@@ -1,0 +1,162 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Minimal open-source U-Boot device tree for POCO X7 Pro (rodin / MT6899).
+ * RAM-only bring-up: core CPU/GICv3/timer/PSCI, LK framebuffer, and clean DRAM banks.
+ * Non-essential phone peripherals (touch, UFS, clocks, regulators, GPU) are omitted.
+ * Note: MediaTek TOPRGU watchdog@1c00b000 is disabled early in dram_init().
+ */
+
+/dts-v1/;
+
+/ {
+	model = "POCO X7 Pro (rodin)";
+	compatible = "poco,rodin", "mediatek,mt6899";
+	interrupt-parent = <&gic>;
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	chosen {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		/*
+		 * Preloader/LK framebuffer (atag,videolfb-fb_base_l = 0xfcc20000, size = 0x33d0000, 60 Hz).
+		 * MediaTek OVL aligns 1220 px width up to 32 px boundary -> 1248 px (4992 bytes/line).
+		 */
+		framebuffer0: framebuffer@fcc20000 {
+			compatible = "simple-framebuffer";
+			reg = <0x0 0xfcc20000 0x0 0x033d0000>;
+			width = <1220>;
+			height = <2712>;
+			stride = <(1248 * 4)>;
+			format = "a8r8g8b8";
+		};
+	};
+
+	/*
+	 * Expose ONLY verified clean unreserved DRAM banks inside armv8-mem-map.c:
+	 * - Bank 0: 0xa0000000..0xb7000000 (clean mid-DRAM, 16 MiB guard below SCP-reserved@b8000000)
+	 * - Bank 1: 0x48a00000..0x66f00000 (clean low-DRAM above BL31@48800000, below initrd@66f00000)
+	 */
+	memory@a0000000 {
+		device_type = "memory";
+		reg = <0x0 0xa0000000 0x0 0x17000000>,
+		      <0x0 0x48a00000 0x0 0x1e500000>;
+	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		/* Android ramoops / pstore region from /proc/cmdline */
+		ramoops@6ec00000 {
+			reg = <0x0 0x6ec00000 0x0 0x00410000>;
+			no-map;
+		};
+
+		/* Safe 64 MiB HakiOS payload window in free DRAM (0xa0000000..0xb7000000); avoids tee-reserved at 0xee200000 */
+		hakios_payload: hakios-payload@ac000000 {
+			reg = <0x0 0xac000000 0x0 0x04000000>;
+			no-map;
+		};
+
+		/* MediaTek TEE reserved region (mblock-28-tee-reserved; overlaps upstream default 0xf0000000) */
+		tee_reserved: tee-reserved@ee200000 {
+			reg = <0x0 0xee200000 0x0 0x0e300000>;
+			no-map;
+		};
+
+		/* LK framebuffer reservation (mblock-17-framebuffer) */
+		framebuffer_reserved: framebuffer@fcc20000 {
+			reg = <0x0 0xfcc20000 0x0 0x033d0000>;
+			no-map;
+		};
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu0: cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,armv8";
+			reg = <0x000>;
+			enable-method = "psci";
+		};
+
+		cpu1: cpu@100 {
+			device_type = "cpu";
+			compatible = "arm,armv8";
+			reg = <0x100>;
+			enable-method = "psci";
+		};
+
+		cpu2: cpu@200 {
+			device_type = "cpu";
+			compatible = "arm,armv8";
+			reg = <0x200>;
+			enable-method = "psci";
+		};
+
+		cpu3: cpu@300 {
+			device_type = "cpu";
+			compatible = "arm,armv8";
+			reg = <0x300>;
+			enable-method = "psci";
+		};
+
+		cpu4: cpu@400 {
+			device_type = "cpu";
+			compatible = "arm,armv8";
+			reg = <0x400>;
+			enable-method = "psci";
+		};
+
+		cpu5: cpu@500 {
+			device_type = "cpu";
+			compatible = "arm,armv8";
+			reg = <0x500>;
+			enable-method = "psci";
+		};
+
+		cpu6: cpu@600 {
+			device_type = "cpu";
+			compatible = "arm,armv8";
+			reg = <0x600>;
+			enable-method = "psci";
+		};
+
+		cpu7: cpu@700 {
+			device_type = "cpu";
+			compatible = "arm,armv8";
+			reg = <0x700>;
+			enable-method = "psci";
+		};
+	};
+
+	psci {
+		compatible = "arm,psci-1.0";
+		method = "smc";
+	};
+
+	timer {
+		compatible = "arm,armv8-timer";
+		interrupts = <1 13 0x4>,
+			     <1 14 0x4>,
+			     <1 11 0x4>,
+			     <1 10 0x4>;
+		clock-frequency = <13000000>;
+	};
+
+	gic: interrupt-controller@c400000 {
+		compatible = "arm,gic-v3";
+		#interrupt-cells = <3>;
+		#address-cells = <2>;
+		#size-cells = <2>;
+		interrupt-controller;
+		reg = <0x0 0x0c400000 0x0 0x00040000>,
+		      <0x0 0x0c440000 0x0 0x00200000>;
+	};
+};

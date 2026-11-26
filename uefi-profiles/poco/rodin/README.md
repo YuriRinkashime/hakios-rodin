@@ -1,0 +1,19 @@
+# POCO X7 Pro (`poco/rodin`) U-Boot Profile
+
+Minimal, RAM-only U-Boot profile (`v2026.07`) for the POCO X7 Pro (`rodin` / MediaTek Dimensity 8400-Ultra `MT6899`).
+
+## Boot, Watchdog & Memory-Map Fixes (Tests #2–#4)
+
+- **Relocation Collision & EMI-MPU Guard (`board_get_usable_ram_top` + `armv8-mem-map.c`):** Upstream `mt8195/init.c` clamped `ram_top` to `SZ_4G` (`0x100000000`), colliding with `mblock-17-framebuffer` (`0xfcc20000..0xffff0000`). `mt8195/init.c` now clamps `ram_top` to **`0xb7000000`** (16 MiB guard below `mblock-31-SCP-reserved@b8000000`), and `armv8-mem-map.c` maps **only** EMI-MPU-clean, 2 MiB-aligned windows with `PTE_BLOCK_INNER_SHARE` (`MT_NORMAL` on `0x40000000..0x48000000`, `0x48a00000..0x6cc00000`, `0xa0000000..0xb8000000`; `MT_NORMAL_NC` on `0x6ec00000..0x6f200000` `ramoops` and `0xfcc00000..0x100000000` framebuffer).
+- **VA-Only Cache Maintenance for GenieZone EL2 (`CONFIG_CMO_BY_VA_ONLY=y`):** MediaTek GenieZone owns EL2 (`ro.boot.hypervisor.version=GenieZone`) and boots U-Boot at EL1. Enabling `CONFIG_CMO_BY_VA_ONLY=y` eliminates all ARMv8 set/way `DC ISW` / `DC CISW` cache instructions from `dcache_enable()` / `dcache_disable()` and restricts `apply_cmo_to_mappings()` to clean mapped DRAM banks.
+- **Minimal Clean Memory Node & EFI Block Dependency (`mt6899-poco-rodin.dts`, `poco_rodin_defconfig`):** Exposes only the two verified clean DRAM banks (`0xa0000000..0xb7000000` and `0x48a00000..0x66f00000`) via `CONFIG_NR_DRAM_BANKS=2`, disables unused `MMC`/`DM_MMC`/`NET`/`DM_ETH`/`VIDEO_LOGO`, and enables `CONFIG_EFI_MEDIA=y` (to satisfy `select BLK`) + `CONFIG_EFI_LOADER=y` so `CMD_BOOTEFI`, `CMD_HAKIOS`, and UEFI GOP are built into `u-boot.bin`.
+- **MT6899 OVL Opaque Alpha & White-on-Black Console (`drivers/video/video-uclass.c`, `poco_rodin_defconfig`):** `video_index_to_colour()` emitted `0x00rrggbb` (transparent alpha) for `a8r8g8b8`, making `video_clear()` and `vidconsole` invisible black on MT6899 OVL. Setting `0xff000000U | ...`, `CONFIG_SYS_WHITE_ON_BLACK=y`, and `CONFIG_CONSOLE_FLUSH_ON_NEWLINE=y` renders crisp opaque text.
+- **UEFI GOP Stride & Safe `PAYLOAD_BASE` (`lib/efi_loader/efi_gop.c`, `cmd/hakios.c`):** `efi_gop_register()` uses `priv->line_length / 4` (`1248` pixels/scanline = `4992` bytes/line) instead of `col` (`1220`), and `cmd/hakios.c` + `loader.efi` use `PAYLOAD_BASE = 0xAC000000` (inside mapped `hakios-payload@ac000000`) instead of `0xF0000000` (`tee-reserved`).
+- **TOPRGU Hardware Watchdog Disabled (`0x1c00b000`):** `dram_init()` kicks `WDT_RESTART` (`0x1971`) and clears `WDT_MODE.EN` (`0x22000000` key); `board_early_init_r()` and `board_late_init()` re-verify it is disabled.
+- **Compact Visual Header (`y = 0..47`) + Direct-FB `16x32` Fallback (`mt8195/init.c`):**
+  - `M1` (`y = 0..19`): Green = `dram_init()`
+  - `S1..S6` (`y = 22..31`): White (`board_get_usable_ram_top`), Magenta (`dram_init_banksize`), Cyan (`enable_caches` enter), Orange (`enable_caches` exit), Lime (`board_early_init_r`), Pink (`board_late_init`)
+  - `M2` (`x = 0..609, y = 34..47`): Blue = `board_late_init()` + `simplefb` ready
+  - `M3` (`x = 610..1219, y = 34..47`): Yellow = `hakios load` OK -> `hakios boot` | Red = `hakios load` / `boot` failed or returned
+  - Direct-FB opaque `16x32` diagnostic lines print at `y = 64..191`, followed by `vidconsole` output at `y >= 224`.
+- **Unaligned GKI v4 `init_boot_b` Scan & Staging (`board_late_init`):** Because MediaTek LK concatenates `init_boot_b` immediately after `vendor_boot` ramdisk (whose size `0x0358efc1` is not 4-byte aligned), `rodin_find_hkub()` scans byte-by-byte across `/chosen/linux,initrd-*` and copies valid `"HKUB"` containers to 4 KiB-aligned `0x60000000` (`RODIN_HKUB_STAGE_ADDR`) for `hakios load`.
