@@ -1,0 +1,23 @@
+/dts-v1/;
+
+// MediaTek Dimensity 8400-Ultra (MT6899), extracted from POCO X7 Pro (rodin) FDT and /proc/iomem.
+// Minimal RAM-only bring-up: core platform registers only; zero Qualcomm SoC blocks.
+/ {
+	name = "mt6899";
+	description = "MediaTek Dimensity 8400-Ultra (MT6899)";
+
+	// What the loader (arch/arm64/boot/) tells the kernel of the machine, for boards with a loader { } section.
+	platform {
+		io-base = <0x0c000000>;        // covers GICv3 (0x0c400000), AP UART (0x11001000..0x11004000), UFS (0x112b0000), Mali (0x13000000), dispsys (0x14000000), WDT/SPMI (0x1c000000..0x1cc080ff)
+		io-size = <0x14000000>;        // 0x0c000000..0x1fffffff peripheral MMIO window (/proc/iomem)
+		psci = "smc";                  // /psci node method: "smc" (arm,psci-1.0)
+		gic-dist = <0x0c400000>;       // interrupt-controller@c400000 (arm,gic-v3), reg[0]
+		gic-redist = <0x0c440000>;     // interrupt-controller@c400000 (arm,gic-v3), reg[1]
+		gic-redist-size = <0x00200000>; // interrupt-controller@c400000 (arm,gic-v3), reg[1] size (2 MiB)
+		uart = <0x11001000>;           // serial@11001000 (mediatek,mt6577-uart, uart-line = 0)
+		ufs = <0x112b0000>;            // ufshci@112b0000 (/proc/iomem; read-only reference)
+		cores = <8>;                   // 8x Cortex-A725 (All-Big-Core: 4 + 3 + 1 performance domains)
+		core-shift = <8>;              // MPIDR Aff1 stride: cpu@0..7 reg 0x000..0x700
+		small-cores = <0x70>;          // matches FDT capacity-dmips-mhz (0x3bb on cpu@100..102 vs 0x400/0x3cb)
+	};
+};

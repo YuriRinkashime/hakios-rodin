@@ -1,0 +1,42 @@
+/dts-v1/;
+
+// POCO X7 Pro (rodin) — MediaTek Dimensity 8400-Ultra (MT6899) / Mali-G720 MC7.
+// Minimal RAM-only bring-up scaffold: zero Qualcomm drivers, zero storage write policy.
+/ {
+	name = "rodin";                        // what the loader puts in /chosen/darwin-board
+	description = "POCO X7 Pro";
+	soc = "mt6899";
+
+	// Nothing yet: keep all hardware feature drivers disabled until each is verified on device.
+	features = <>;
+
+	// Software dimming only until MediaTek DSI / panel backlight control is ported.
+	backlight {
+		type = "soft";
+	};
+
+	// Preloader/LK framebuffer from /chosen atag,videolfb-fb_base_l and reserved-memory mblock-17-framebuffer.
+	loader {
+		fb-base = <0xfcc20000>;
+	};
+
+	// RAM-only initial boot arguments (zero ufs_write=1, software rendering).
+	boot {
+		fastboot-product = "rodin";
+		cpus = <1>;
+		bootargs = "gpu=0", "debug=0x144", "serial=3";
+	};
+
+	// Documented hardware nodes from Android FDT (kept disabled for initial bring-up):
+	//
+	// Touch IC (xiaomi_touch@0, xiaomi,touch-spi / Goodix SPI; dmesg: goodix_ts):
+	//   interrupt = <9>;                  // GPIO 9, IRQ flag 0x2008
+	//   reset = <134>;                    // GPIO 134 (0x86)
+	//   avdd-gpio = <73>;                 // GPIO 73 (0x49)
+	//   coordinates = <0x0001dc8f 0x0004235f>; // 1220x2712 with super-resolution-factor = 100
+	//
+	// Physical keys (mt6363keys, compatible = "mediatek,mt6363-keys" on PMIC MT6363):
+	//   power      = keycode 0x74 (116, KEY_POWER, wakeup-source)
+	//   volume-dn  = keycode 0x72 (114, KEY_VOLUMEDOWN)
+	//   volume-up  = keycode 0x73 (115, KEY_VOLUMEUP, wakeup-source)
+};
